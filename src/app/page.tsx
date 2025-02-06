@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
 import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid"; // Import icons
 import { ToastOptions } from "react-hot-toast"; // Import ToastOptions
+import {
+  Disclosure,
+  DisclosureButton,
+  DisclosurePanel,
+} from "@headlessui/react";
+import { ChevronUpIcon } from "@heroicons/react/20/solid";
 
 const toastOptions: ToastOptions = {
   position: "bottom-right", // Set the toast position
@@ -126,8 +132,48 @@ export default function Home() {
   };
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
+    <div className="flex flex-col min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)] items-center justify-center">
+      <main className="flex flex-col gap-8  items-center sm:items-start">
+        <Disclosure>
+          {({ open }) => (
+            <>
+              <DisclosureButton className="flex justify-between w-full px-4 py-2 text-sm font-medium text-left text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus-visible:ring focus-visible:ring-gray-500 focus-visible:ring-opacity-75">
+                <span>
+                  {open ? "Instructions" : "Need help with the JSON format?"}
+                </span>
+                <ChevronUpIcon
+                  className={`${
+                    !open ? "transform rotate-180" : ""
+                  } w-5 h-5 text-gray-500`}
+                />
+              </DisclosureButton>
+              <DisclosurePanel className="px-4 pt-4 pb-2 text-sm text-gray-500 border border-gray-300 rounded-md mt-2 w-full max-w-2xl">
+                <ol className="list-decimal pl-5">
+                  <li>
+                    Go to any subbreddit, eg:
+                    https://www.reddit.com/r/personalfinanceindia.
+                  </li>
+                  <li>
+                    Then just make a small change in the url, add '.json'. Eg:
+                    https://www.reddit.com/r/personalfinanceindia.json
+                  </li>
+                  <li>
+                    Obtain the JSON data representing the Reddit posts you want
+                    to upload.
+                  </li>
+                  <li>Paste the JSON data into the text area provided.</li>
+                  <li>
+                    Click the "Upload" button to begin the upload process.
+                  </li>
+                  <li>
+                    The status of each post's upload will be displayed below the
+                    button.
+                  </li>
+                </ol>
+              </DisclosurePanel>
+            </>
+          )}
+        </Disclosure>
         <textarea
           placeholder="Please enter your JSON data here..."
           rows={10}
