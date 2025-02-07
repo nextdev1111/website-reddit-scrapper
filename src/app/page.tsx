@@ -24,6 +24,7 @@ interface Post {
 
 export default function Home() {
   const [jsonData, setJsonData] = useState<undefined | string>(undefined);
+  const [subredditUrl, setSubredditUrl] = useState<string | undefined>(""); // State for subreddit URL
   const [posts, setPosts] = useState<Post[]>();
 
   const supabase = createClient(
@@ -70,9 +71,13 @@ export default function Home() {
     await Promise.all(
       postsToUpload.map(async (post, index) => {
         try {
-          const { error } = await supabase
-            .from("Posts")
-            .insert([{ title: post.title, description: post.description }]);
+          const { error } = await supabase.from("Posts").insert([
+            {
+              title: post.title,
+              description: post.description,
+              url: subredditUrl,
+            },
+          ]); // Include URL
 
           setPosts((prevPosts) => {
             const newPosts = [...prevPosts!];
@@ -141,6 +146,7 @@ export default function Home() {
         ...toastOptions,
       });
       setJsonData(undefined);
+      setSubredditUrl(undefined);
     } else if (successful > 0) {
       toast.success(
         `${successful} posts uploaded successfully. ${errors} errors.`,
@@ -198,6 +204,13 @@ export default function Home() {
             </>
           )}
         </Disclosure>
+        <input // Input box for subreddit URL
+          type="text"
+          placeholder="Enter subreddit URL (e.g., https://www.reddit.com/r/personalfinanceindia)"
+          value={subredditUrl}
+          onChange={(e) => setSubredditUrl(e.target.value)}
+          className="mb-2 w-full max-w-2xl px-3 py-2 text-base border border-gray-300 rounded-md shadow-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+        />
         <textarea
           placeholder="Please enter your JSON data here..."
           rows={10}
@@ -210,12 +223,16 @@ export default function Home() {
         />
         {/* prompt: I want to build a button here which sends a callback to the function */}{" "}
         <button
-          disabled={!jsonData} // Disable if jsonData is empty
+          disabled={!jsonData || !subredditUrl} // Disable if jsonData is empty
           className="p-2 border border-gray-400 rounded-md shadow-sm hover:bg-gray-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200"
           onClick={(e) => extractPostsFromJson()}
         >
           Upload
         </button>
+        <p className="max-w-2xl w-full border border-gray-300 rounded-md p-4 mt-4">
+          Note: Please remember to enter the correct subreddit url before
+          uploading the data. This can manipulate the analysis.
+        </p>
         {/* Added container div */}
         <div className="max-w-2xl w-full border border-gray-300 rounded-md p-4 mt-4">
           {posts && posts.length > 0 ? (
