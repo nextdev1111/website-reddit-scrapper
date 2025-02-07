@@ -2,8 +2,8 @@
 import { createClient } from "@/supabase/client";
 import { useEffect, useState } from "react";
 import toast, { Toaster } from "react-hot-toast";
-import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid"; // Import icons
-import { ToastOptions } from "react-hot-toast"; // Import ToastOptions
+import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/solid";
+import { ToastOptions } from "react-hot-toast";
 import {
   Disclosure,
   DisclosureButton,
@@ -12,20 +12,20 @@ import {
 import { ChevronUpIcon } from "@heroicons/react/20/solid";
 
 const toastOptions: ToastOptions = {
-  position: "bottom-right", // Set the toast position
+  position: "bottom-right",
 };
 
 interface Post {
   title: string;
   description: string;
-  uploaded: boolean;
+  status: "pending" | "success" | "error";
+  errorMessage?: string;
 }
 
 export default function Home() {
   const [jsonData, setJsonData] = useState<undefined | string>(undefined);
   const [posts, setPosts] = useState<Post[]>();
 
-  // Initialising a supabase client
   const supabase = createClient(
     process.env.SUPABASE_URL!,
     process.env.SERVICE_ROLE_KEY!
@@ -44,28 +44,17 @@ export default function Home() {
       }
 
       const extractedPosts: Post[] = parsedData.data.children
-        .map((child: any) => {
-          if (child.kind === "t3" && child.data) {
-            // Assuming 't3' is the post kind
-            return {
-              title: child.data.title || "No Title",
-              description: child.data.selftext || "No Description", // Using markdown description directly for now
-              uploaded: false,
-            } as Post;
-          }
-          return null; // Filter out non-post items if any
-        })
-        .filter((post: null) => post !== null) as Post[]; // Filter out null values and assert type
+        .filter((child: any) => child.kind === "t3" && child.data)
+        .map((child: any) => ({
+          title: child.data.title || "No Title",
+          description: child.data.selftext || "No Description",
+          status: "pending",
+        }));
 
       setPosts(extractedPosts);
-      uploadPostsToSupabase(posts || []);
+      uploadPostsToSupabase(extractedPosts);
     } catch (e: any) {
-      toast.error(
-        "Please upload something. If already uploaded, then unknown error",
-        {
-          ...toastOptions,
-        }
-      );
+      toast.error("Invalid JSON or no posts found.", toastOptions);
       setPosts([]);
     }
   };
@@ -76,61 +65,96 @@ export default function Home() {
       return;
     }
 
-    let uploadedCount = 0;
+    const toastId = toast.loading("Uploading posts...", toastOptions);
 
-    const toastId = toast.loading(
-      `Uploading 0 of ${postsToUpload.length} posts...`,
-      { duration: Infinity, ...toastOptions }
-    ); // Initial toast
+    await Promise.all(
+      postsToUpload.map(async (post, index) => {
+        try {
+          const { error } = await supabase
+            .from("Posts")
+            .insert([{ title: post.title, description: post.description }]);
 
-    for (let i = 0; i < postsToUpload.length; i++) {
-      const post = postsToUpload[i];
-
-      try {
-        const { error } = await supabase
-          .from("Posts")
-          .insert([{ title: post.title, description: post.description }]);
-
-        if (error) {
-          toast.error(`Error uploading post ${i + 1}: ${error.message}`, {
-            id: toastId,
-            ...toastOptions,
-          });
-          break; // Stop on error
-        } else {
-          uploadedCount++;
-
-          // Use the functional form of setPosts to update the state correctly
           setPosts((prevPosts) => {
             const newPosts = [...prevPosts!];
-            newPosts[i].uploaded = true;
+            if (error) {
+              newPosts[index].status = "error";
+              newPosts[index].errorMessage = error.message;
+            } else {
+              newPosts[index].status = "success";
+            }
+            updateToast(newPosts, toastId);
+
+            if (newPosts.every((post) => post.status !== "pending")) {
+              checkAllUploaded(newPosts, toastId);
+            }
+
             return newPosts;
           });
+        } catch (e: any) {
+          setPosts((prevPosts) => {
+            const newPosts = [...prevPosts!];
+            newPosts[index].status = "error";
+            newPosts[index].errorMessage = e.message;
+            updateToast(newPosts, toastId);
 
-          toast.loading(
-            `Uploading ${uploadedCount} of ${postsToUpload.length} posts...`,
-            { id: toastId, ...toastOptions }
-          ); // Update toast
-
-          if (uploadedCount === postsToUpload.length) {
-            toast.success("All posts uploaded successfully!", {
-              id: toastId,
-              ...toastOptions,
-            });
-
-            setJsonData(undefined);
-          }
+            if (newPosts.every((post) => post.status !== "pending")) {
+              checkAllUploaded(newPosts, toastId);
+            }
+            return newPosts;
+          });
         }
-      } catch (e: any) {
-        toast.error(`Unknown error uploading post ${i + 1}: ${e.message}`, {
-          id: toastId,
-          ...toastOptions,
-        });
-        break; // Stop on error
+      })
+    );
+  };
+
+  const updateToast = (currentPosts: Post[], toastId: string) => {
+    const successful = currentPosts.filter(
+      (post) => post.status === "success"
+    ).length;
+    const pending = currentPosts.filter(
+      (post) => post.status === "pending"
+    ).length;
+    const errors = currentPosts.filter(
+      (post) => post.status === "error"
+    ).length;
+
+    toast.loading(
+      `${successful} successful, ${pending} pending, ${errors} errors`,
+      {
+        id: toastId,
+        ...toastOptions,
       }
+    );
+  };
+
+  const checkAllUploaded = (currentPosts: Post[], toastId: string) => {
+    const successful = currentPosts.filter(
+      (post) => post.status === "success"
+    ).length;
+    const errors = currentPosts.filter(
+      (post) => post.status === "error"
+    ).length;
+
+    if (successful === currentPosts.length) {
+      toast.success("All posts uploaded successfully!", {
+        id: toastId,
+        ...toastOptions,
+      });
+      setJsonData(undefined);
+    } else if (successful > 0) {
+      toast.success(
+        `${successful} posts uploaded successfully. ${errors} errors.`,
+        { id: toastId, ...toastOptions }
+      );
+    } else {
+      toast.error("No posts could be uploaded.", {
+        id: toastId,
+        ...toastOptions,
+      });
     }
   };
 
+  // ... (rest of the component JSX - same as before)
   return (
     <div className="flex flex-col min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)] items-center justify-center">
       <main className="flex flex-col gap-8  items-center sm:items-start">
@@ -203,11 +227,15 @@ export default function Home() {
                 <div className="flex-shrink-0 mr-4">
                   {" "}
                   {/* Container for icon */}
-                  {post.uploaded ? (
-                    <CheckCircleIcon className="h-5 w-5 text-green-500" />
-                  ) : (
-                    <XCircleIcon className="h-5 w-5 text-red-500" />
-                  )}
+                  <div className="flex-shrink-0 mr-4">
+                    {post.status === "success" ? (
+                      <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                    ) : post.status === "error" ? (
+                      <XCircleIcon className="h-5 w-5 text-red-500" />
+                    ) : (
+                      <div className="h-5 w-5 rounded-full bg-gray-400 animate-pulse"></div> // Pending state
+                    )}
+                  </div>
                 </div>
                 <div>
                   <h3 className="font-medium text-lg">
@@ -216,6 +244,17 @@ export default function Home() {
                   </h3>
                   <p className="text-gray-600">
                     {post.description.substring(0, 100) + "..."}
+                  </p>
+                  <p>
+                    {post.status === "error" && (
+                      <p className="text-red-500 text-sm mt-1">
+                        Error:{" "}
+                        {post.errorMessage ==
+                        'duplicate key value violates unique constraint "Posts_title_key"'
+                          ? "This post is already saved"
+                          : post.errorMessage}
+                      </p>
+                    )}
                   </p>
                 </div>
               </div>
